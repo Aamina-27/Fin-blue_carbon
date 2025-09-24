@@ -2,6 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertProjectSchema, insertFieldDataSchema, insertAuditLogSchema } from "@shared/schema";
+import { verifyMangroveImage, getProjectVerificationStatus, batchVerifyImages } from "./aiVerifier.js";
+import { validateProjectLocation, getProjectGISSnapshots, getHistoricalVegetationData } from "./gisService.js";
 import { z } from "zod";
 import multer from "multer";
 
@@ -20,9 +22,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let user = await storage.getUserByWallet(walletAddress);
       
       if (!user) {
+        // Validate and assign the requested role
+        const validRoles = ["ngo", "admin", "industry", "government"];
+        const assignedRole = validRoles.includes(role) ? role : "ngo";
+        
         const userData = insertUserSchema.parse({
           walletAddress,
-          role: "ngo", // Always assign NGO role, ignore client input
+          role: assignedRole,
           organizationName,
           email,
         });
@@ -198,6 +204,318 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get audit logs error:", error);
       res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
+  // AI Verification Routes
+  app.post("/api/verification/submit", upload.single("image"), async (req, res) => {
+    try {
+      const { projectId, fieldDataId } = req.body;
+      const imageFile = req.file;
+
+      if (!imageFile) {
+        return res.status(400).json({ message: "Image file is required" });
+      }
+
+      // Convert image to base64
+      const base64Image = imageFile.buffer.toString('base64');
+      
+      // Run AI verification
+      const result = await verifyMangroveImage(projectId, fieldDataId, base64Image);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI verification error:", error);
+      res.status(500).json({ message: "AI verification failed" });
+    }
+  });
+
+  app.get("/api/verification/status/:projectId", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const verificationJobs = await getProjectVerificationStatus(projectId);
+      res.json({ verificationJobs });
+    } catch (error) {
+      console.error("Get verification status error:", error);
+      res.status(500).json({ message: "Failed to get verification status" });
+    }
+  });
+
+  // GIS Validation Routes
+  app.post("/api/gis/validate", async (req, res) => {
+    try {
+      const { projectId, latitude, longitude, areaHectares } = req.body;
+      
+      const validationResult = await validateProjectLocation(
+        projectId, 
+        parseFloat(latitude), 
+        parseFloat(longitude), 
+        parseFloat(areaHectares)
+      );
+      
+      res.json(validationResult);
+    } catch (error) {
+      console.error("GIS validation error:", error);
+      res.status(500).json({ message: "GIS validation failed" });
+    }
+  });
+
+  app.get("/api/gis/snapshots/:projectId", async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const snapshots = await getProjectGISSnapshots(projectId);
+      res.json({ snapshots });
+    } catch (error) {
+      console.error("Get GIS snapshots error:", error);
+      res.status(500).json({ message: "Failed to get GIS snapshots" });
+    }
+  });
+
+  app.get("/api/gis/overlays", async (req, res) => {
+    try {
+      // Mock GIS overlay data for map display
+      const overlays = [
+        {
+          projectId: "project1",
+          ndviLayer: "https://sentinel-hub.example.com/ndvi/layer1",
+          sentinelImagery: "https://sentinel-hub.example.com/rgb/scene1",
+          bounds: [[10.0, -5.0], [10.1, -4.9]]
+        }
+      ];
+      
+      res.json(overlays);
+    } catch (error) {
+      console.error("Get GIS overlays error:", error);
+      res.status(500).json({ message: "Failed to get GIS overlays" });
+    }
+  });
+
+  // Map Data Routes
+  app.get("/api/projects/map-data", async (req, res) => {
+    try {
+      const projects = await storage.getProjects("verified");
+      
+      const mapProjects = projects.map(project => ({
+        id: project.id,
+        name: project.name,
+        latitude: parseFloat(project.latitude),
+        longitude: parseFloat(project.longitude),
+        status: project.status,
+        ecosystem: project.projectType,
+        areaHectares: parseFloat(project.areaHectares),
+        carbonCredits: parseFloat(project.carbonCredits || "0"),
+        aiVerificationScore: Math.random() * 0.3 + 0.7, // Mock AI score
+        gisValidated: Math.random() > 0.2, // Mock GIS validation
+        nftTokenId: Math.floor(Math.random() * 1000) + 1,
+        polygon: [], // Mock polygon data
+        ndviData: {
+          averageNDVI: Math.random() * 0.4 + 0.4,
+          vegetationPercentage: Math.random() * 30 + 60
+        }
+      }));
+      
+      res.json(mapProjects);
+    } catch (error) {
+      console.error("Get map data error:", error);
+      res.status(500).json({ message: "Failed to get map data" });
+    }
+  });
+
+  // Industry Dashboard Routes
+  app.get("/api/credits/marketplace", async (req, res) => {
+    try {
+      const verifiedProjects = await storage.getProjects("verified");
+      
+      const marketplace = verifiedProjects.map(project => ({
+        id: project.id,
+        projectId: project.id,
+        projectName: project.name,
+        location: project.location,
+        ecosystem: project.projectType,
+        areaHectares: parseFloat(project.areaHectares),
+        creditsAvailable: Math.floor(parseFloat(project.carbonCredits || "0") * Math.random()),
+        pricePerCredit: Math.floor(Math.random() * 20) + 10,
+        nftTokenId: Math.floor(Math.random() * 1000) + 1,
+        verifiedAt: project.verifiedAt,
+        submitterOrg: "NGO Partner"
+      }));
+      
+      res.json(marketplace);
+    } catch (error) {
+      console.error("Get marketplace error:", error);
+      res.status(500).json({ message: "Failed to get marketplace data" });
+    }
+  });
+
+  app.get("/api/credits/purchase-history", async (req, res) => {
+    try {
+      // Mock purchase history data
+      const purchaseHistory = [
+        {
+          id: "purchase1",
+          projectId: "proj1",
+          projectName: "Mangrove Restoration Sundarbans",
+          creditsRetired: 150,
+          retirementReason: "Annual carbon offset program",
+          retiredAt: new Date().toISOString(),
+          nftCertificateUrl: "https://ipfs.io/certificate1"
+        }
+      ];
+      
+      res.json(purchaseHistory);
+    } catch (error) {
+      console.error("Get purchase history error:", error);
+      res.status(500).json({ message: "Failed to get purchase history" });
+    }
+  });
+
+  app.get("/api/industry/stats", async (req, res) => {
+    try {
+      const stats = {
+        totalCreditsPurchased: 1250,
+        monthlyGrowth: 15,
+        totalCO2Offset: 2500,
+        projectsSupported: 8,
+        countries: 4,
+        nftCertificates: 12
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Get industry stats error:", error);
+      res.status(500).json({ message: "Failed to get industry stats" });
+    }
+  });
+
+  app.post("/api/credits/purchase", async (req, res) => {
+    try {
+      const { projectId, credits, retirementReason } = req.body;
+      
+      // Mock purchase processing
+      const purchase = {
+        id: `purchase_${Date.now()}`,
+        projectId,
+        credits,
+        retirementReason,
+        timestamp: new Date().toISOString(),
+        nftCertificateUrl: `https://ipfs.io/certificate_${Date.now()}`
+      };
+      
+      res.json(purchase);
+    } catch (error) {
+      console.error("Purchase credits error:", error);
+      res.status(500).json({ message: "Failed to purchase credits" });
+    }
+  });
+
+  // Government Dashboard Routes
+  app.get("/api/government/national-stats", async (req, res) => {
+    try {
+      const projects = await storage.getProjects();
+      const verifiedProjects = projects.filter(p => p.status === "verified");
+      
+      const stats = {
+        totalCarbonStock: verifiedProjects.reduce((sum, p) => sum + parseFloat(p.carbonCredits || "0"), 0),
+        yearOverYearGrowth: 18,
+        verifiedProjects: verifiedProjects.length,
+        pendingVerification: projects.filter(p => p.status === "pending").length,
+        totalAreaRestored: verifiedProjects.reduce((sum, p) => sum + parseFloat(p.areaHectares || "0"), 0),
+        regions: 5,
+        communitiesEngaged: 45,
+        ngoPartners: 12
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Get national stats error:", error);
+      res.status(500).json({ message: "Failed to get national stats" });
+    }
+  });
+
+  app.get("/api/government/regional-data", async (req, res) => {
+    try {
+      const regionalData = [
+        {
+          region: "Coastal Bengal",
+          projectsCount: 8,
+          areaRestored: 450,
+          carbonStored: 2250,
+          communities: 15
+        },
+        {
+          region: "Western Ghats",
+          projectsCount: 5,
+          areaRestored: 280,
+          carbonStored: 1400,
+          communities: 8
+        },
+        {
+          region: "Andaman Islands",
+          projectsCount: 3,
+          areaRestored: 120,
+          carbonStored: 600,
+          communities: 5
+        }
+      ];
+      
+      res.json(regionalData);
+    } catch (error) {
+      console.error("Get regional data error:", error);
+      res.status(500).json({ message: "Failed to get regional data" });
+    }
+  });
+
+  app.get("/api/government/policy-insights", async (req, res) => {
+    try {
+      const policyInsights = [
+        {
+          id: "insight1",
+          title: "Accelerated Mangrove Restoration Needed",
+          description: "Current restoration rates are below targets for achieving national climate goals by 2030.",
+          impact: "high",
+          region: "National",
+          recommendations: [
+            "Increase funding for community-based restoration programs",
+            "Streamline verification processes for faster project approval",
+            "Develop regional centers of excellence for blue carbon research"
+          ]
+        }
+      ];
+      
+      res.json(policyInsights);
+    } catch (error) {
+      console.error("Get policy insights error:", error);
+      res.status(500).json({ message: "Failed to get policy insights" });
+    }
+  });
+
+  app.get("/api/government/carbon-trends", async (req, res) => {
+    try {
+      const carbonTrends = Array.from({ length: 12 }, (_, i) => ({
+        month: new Date(2024, i).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        carbonStored: Math.floor(Math.random() * 500) + 1000 + (i * 50)
+      }));
+      
+      res.json(carbonTrends);
+    } catch (error) {
+      console.error("Get carbon trends error:", error);
+      res.status(500).json({ message: "Failed to get carbon trends" });
+    }
+  });
+
+  app.get("/api/government/ecosystem-distribution", async (req, res) => {
+    try {
+      const ecosystemData = [
+        { name: "Mangrove", area: 650 },
+        { name: "Seagrass", area: 280 },
+        { name: "Salt Marsh", area: 120 },
+        { name: "Other", area: 80 }
+      ];
+      
+      res.json(ecosystemData);
+    } catch (error) {
+      console.error("Get ecosystem distribution error:", error);
+      res.status(500).json({ message: "Failed to get ecosystem distribution" });
     }
   });
 

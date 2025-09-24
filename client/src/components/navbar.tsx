@@ -22,6 +22,12 @@ export default function Navbar() {
             <Link href="/ngo-dashboard" className="text-muted-foreground hover:text-primary transition-colors" data-testid="link-ngo-dashboard">
               NGO Dashboard
             </Link>
+            <Link href="/industry-dashboard" className="text-muted-foreground hover:text-primary transition-colors" data-testid="link-industry-dashboard">
+              Industry Dashboard
+            </Link>
+            <Link href="/gov-dashboard" className="text-muted-foreground hover:text-primary transition-colors" data-testid="link-gov-dashboard">
+              Government Analytics
+            </Link>
             <Link href="/admin-dashboard" className="text-muted-foreground hover:text-primary transition-colors" data-testid="link-admin-dashboard">
               Admin Dashboard
             </Link>
