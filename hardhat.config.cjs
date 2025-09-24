@@ -13,14 +13,20 @@ module.exports = {
     },
   },
   networks: {
+    // Local Hardhat network
+    hardhat: {},
+
+    // Localhost (when you run `npx hardhat node`)
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+    },
+
+    // Polygon Mumbai Testnet (optional)
     mumbai: {
       url: process.env.POLYGON_MUMBAI_RPC || "https://rpc-mumbai.maticvigil.com",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80001,
-    },
-    localhost: {
-      url: "http://127.0.0.1:8545",
-      chainId: 31337,
     },
   },
   etherscan: {
