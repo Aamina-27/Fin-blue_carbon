@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertProjectSchema, insertFieldDataSchema, insertAuditLogSchema } from "@shared/schema";
 import { verifyMangroveImage, getProjectVerificationStatus, batchVerifyImages } from "./aiVerifier.js";
-import { validateProjectLocation, getProjectGISSnapshots, getHistoricalVegetationData } from "./gisService.js";
+import { gisVerificationService, type GisCoordinates } from "./gisService";
 import { z } from "zod";
 import multer from "multer";
 
@@ -97,6 +97,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "submitted",
         details: { projectName: project.name },
       });
+
+      // Trigger GIS verification automatically for the new project
+      try {
+        const gisCoordinates: GisCoordinates = {
+          latitude: parseFloat(project.latitude),
+          longitude: parseFloat(project.longitude),
+          areaHectares: parseFloat(project.areaHectares),
+          projectType: project.projectType as "mangrove" | "seagrass" | "saltmarsh" | "other"
+        };
+
+        const gisResult = await gisVerificationService.verifyPlantationArea(gisCoordinates);
+        
+        // Update project with GIS verification results
+        await storage.updateProject(project.id, {
+          gisVerificationStatus: gisResult.status === "verified" ? "verified" : gisResult.status === "failed" ? "failed" : "pending",
+          gisVerifiedAt: new Date(),
+          gisConfidenceScore: gisResult.confidenceScore.toString()
+        });
+
+        // Store GIS snapshot
+        await storage.createGisSnapshot({
+          projectId: project.id,
+          sentinelSceneId: gisResult.metadata.sentinelSceneId,
+          geometry: {
+            type: "Point",
+            coordinates: [gisCoordinates.longitude, gisCoordinates.latitude]
+          },
+          areaValidatedHa: gisResult.areaValidatedHectares.toString(),
+          ndviStats: {
+            ndvi: gisResult.vegetationIndex,
+            vegetationHealth: gisResult.metadata.vegetationHealth,
+            cloudCover: gisResult.metadata.cloudCover
+          },
+          imageryDate: new Date(gisResult.imageDate)
+        });
+
+        console.log(`GIS verification completed for project ${project.id}: ${gisResult.status} (confidence: ${gisResult.confidenceScore})`);
+      } catch (gisError) {
+        console.error("GIS verification failed:", gisError);
+        // Don't fail the project creation if GIS verification fails
+        await storage.updateProject(project.id, {
+          gisVerificationStatus: "failed"
+        });
+      }
 
       res.status(201).json({ project });
     } catch (error) {
@@ -244,14 +288,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GIS Validation Routes
   app.post("/api/gis/validate", async (req, res) => {
     try {
-      const { projectId, latitude, longitude, areaHectares } = req.body;
+      const { latitude, longitude, areaHectares, projectType } = req.body;
       
-      const validationResult = await validateProjectLocation(
-        projectId, 
-        parseFloat(latitude), 
-        parseFloat(longitude), 
-        parseFloat(areaHectares)
-      );
+      const gisCoordinates: GisCoordinates = {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        areaHectares: parseFloat(areaHectares),
+        projectType: projectType as "mangrove" | "seagrass" | "saltmarsh" | "other"
+      };
+      
+      const validationResult = await gisVerificationService.verifyPlantationArea(gisCoordinates);
       
       res.json(validationResult);
     } catch (error) {
@@ -263,7 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/gis/snapshots/:projectId", async (req, res) => {
     try {
       const { projectId } = req.params;
-      const snapshots = await getProjectGISSnapshots(projectId);
+      const snapshots = await storage.getGisSnapshotsByProject(projectId);
       res.json({ snapshots });
     } catch (error) {
       console.error("Get GIS snapshots error:", error);

@@ -22,8 +22,10 @@ export default function MapView() {
 
   const projects = (projectsData as any)?.projects || [];
   const verifiedProjects = projects.filter((p: any) => p.status === "verified");
+  const gisVerifiedProjects = projects.filter((p: any) => p.gisVerificationStatus === "verified");
   const totalCredits = verifiedProjects.reduce((sum: number, p: any) => sum + parseFloat(p.carbonCredits || "0"), 0);
   const totalArea = verifiedProjects.reduce((sum: number, p: any) => sum + parseFloat(p.areaHectares || "0"), 0);
+  const gisVerifiedArea = gisVerifiedProjects.reduce((sum: number, p: any) => sum + parseFloat(p.areaHectares || "0"), 0);
 
   useEffect(() => {
     // Load Leaflet CSS and JS
@@ -91,22 +93,77 @@ export default function MapView() {
 
       if (isNaN(lat) || isNaN(lng)) return;
 
-      const color = project.status === 'verified' ? '#4CAF50' : 
-                   project.status === 'pending' ? '#f44336' : '#009688';
+      // Determine marker color based on status and GIS verification
+      let color = '#009688'; // Default teal
+      let strokeColor = '#004d40';
+      
+      if (project.status === 'verified') {
+        color = project.gisVerificationStatus === 'verified' ? '#2E7D32' : '#4CAF50';
+        strokeColor = '#1B5E20';
+      } else if (project.status === 'pending') {
+        color = '#f44336';
+        strokeColor = '#c62828';
+      } else if (project.status === 'rejected') {
+        color = '#9E9E9E';
+        strokeColor = '#424242';
+      }
+
+      // Add satellite icon for GIS verified projects
+      const isGisVerified = project.gisVerificationStatus === 'verified';
+      const markerRadius = isGisVerified ? 10 : 8;
 
       const marker = window.L.circleMarker([lat, lng], {
-        color: color,
+        color: strokeColor,
         fillColor: color,
         fillOpacity: 0.8,
-        radius: 8
+        radius: markerRadius,
+        weight: isGisVerified ? 3 : 2
       }).addTo(mapInstanceRef.current);
 
+      // Enhanced popup content with GIS information
+      const gisStatus = project.gisVerificationStatus || 'pending';
+      const gisConfidence = project.gisConfidenceScore ? (parseFloat(project.gisConfidenceScore) * 100).toFixed(0) : 'N/A';
+      
+      const gisIcon = isGisVerified ? '🛰️' : gisStatus === 'failed' ? '⚠️' : '⏳';
+      const gisColor = isGisVerified ? 'text-green-600' : gisStatus === 'failed' ? 'text-red-600' : 'text-yellow-600';
+
       const popupContent = `
-        <div class="p-2">
-          <h3 class="font-semibold text-sm">${project.name}</h3>
-          <p class="text-xs text-gray-600 mt-1">Status: ${project.status}</p>
-          <p class="text-xs text-gray-600">Area: ${project.areaHectares} ha</p>
-          ${parseFloat(project.carbonCredits || "0") > 0 ? `<p class="text-xs text-green-600 mt-1">Credits: ${parseFloat(project.carbonCredits).toFixed(0)} BC</p>` : ''}
+        <div class="p-3 min-w-[250px]">
+          <h3 class="font-semibold text-sm mb-2">${project.name}</h3>
+          
+          <div class="space-y-1">
+            <p class="text-xs text-gray-600">
+              <span class="font-medium">Status:</span> 
+              <span class="capitalize">${project.status}</span>
+            </p>
+            
+            <p class="text-xs ${gisColor}">
+              <span class="font-medium">GIS Verified:</span> 
+              ${gisIcon} <span class="capitalize">${gisStatus}</span>
+              ${isGisVerified ? ` (${gisConfidence}% confidence)` : ''}
+            </p>
+            
+            <p class="text-xs text-gray-600">
+              <span class="font-medium">Area:</span> ${project.areaHectares} ha
+            </p>
+            
+            <p class="text-xs text-gray-600">
+              <span class="font-medium">Type:</span> ${project.projectType}
+            </p>
+            
+            ${parseFloat(project.carbonCredits || "0") > 0 ? `
+              <p class="text-xs text-green-600 mt-2">
+                <span class="font-medium">Credits:</span> ${parseFloat(project.carbonCredits).toFixed(0)} BC
+              </p>
+            ` : ''}
+            
+            ${isGisVerified ? `
+              <div class="mt-2 pt-2 border-t border-gray-200">
+                <p class="text-xs text-blue-600 font-medium">Satellite Verified ✓</p>
+                <p class="text-xs text-gray-500">Verified using Sentinel imagery</p>
+              </div>
+            ` : ''}
+          </div>
         </div>
       `;
 

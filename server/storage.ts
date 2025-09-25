@@ -1,4 +1,4 @@
-import { users, projects, fieldData, auditLogs, type User, type Project, type FieldData, type AuditLog, type InsertUser, type InsertProject, type InsertFieldData, type InsertAuditLog } from "@shared/schema";
+import { users, projects, fieldData, auditLogs, gisSnapshots, type User, type Project, type FieldData, type AuditLog, type GisSnapshot, type InsertUser, type InsertProject, type InsertFieldData, type InsertAuditLog, type InsertGisSnapshot } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -22,6 +22,10 @@ export interface IStorage {
   // Audit log methods
   createAuditLog(auditLog: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(projectId?: string): Promise<AuditLog[]>;
+
+  // GIS snapshot methods
+  createGisSnapshot(gisSnapshot: InsertGisSnapshot): Promise<GisSnapshot>;
+  getGisSnapshotsByProject(projectId: string): Promise<GisSnapshot[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -67,7 +71,7 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
-  async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+  async updateProject(id: string, updates: Partial<Omit<Project, 'id' | 'createdAt'>>): Promise<Project> {
     const [project] = await db.update(projects).set(updates).where(eq(projects.id, id)).returning();
     return project;
   }
@@ -97,6 +101,15 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(auditLogs).where(eq(auditLogs.projectId, projectId)).orderBy(desc(auditLogs.timestamp));
     }
     return await db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp));
+  }
+
+  async createGisSnapshot(insertGisSnapshot: InsertGisSnapshot): Promise<GisSnapshot> {
+    const [snapshot] = await db.insert(gisSnapshots).values([insertGisSnapshot]).returning();
+    return snapshot;
+  }
+
+  async getGisSnapshotsByProject(projectId: string): Promise<GisSnapshot[]> {
+    return await db.select().from(gisSnapshots).where(eq(gisSnapshots.projectId, projectId)).orderBy(desc(gisSnapshots.verifiedAt));
   }
 }
 

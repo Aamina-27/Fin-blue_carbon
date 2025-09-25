@@ -34,6 +34,10 @@ contract NFTCertificate is ERC721, ERC721URIStorage, Ownable {
         string ecosystem; // "mangrove", "seagrass", "saltmarsh"
         address beneficiary;
         bool verified;
+        bool gisVerified;
+        uint256 gisConfidenceScore; // Scaled by 10000 (e.g., 8500 = 0.85)
+        string sentinelSceneId;
+        uint256 vegetationIndex; // NDVI scaled by 10000
     }
 
     event CertificateMinted(
@@ -61,6 +65,10 @@ contract NFTCertificate is ERC721, ERC721URIStorage, Ownable {
      * @param ecosystem Type of blue carbon ecosystem
      * @param beneficiary Address that will receive the NFT
      * @param metadataURI IPFS URI containing certificate metadata
+     * @param gisVerified Whether project is verified by satellite imagery
+     * @param gisConfidenceScore GIS verification confidence (scaled by 10000)
+     * @param sentinelSceneId Sentinel Hub scene identifier
+     * @param vegetationIndex NDVI value (scaled by 10000)
      */
     function mintCertificate(
         string memory projectId,
@@ -69,7 +77,11 @@ contract NFTCertificate is ERC721, ERC721URIStorage, Ownable {
         uint256 carbonCredits,
         string memory ecosystem,
         address beneficiary,
-        string memory metadataURI
+        string memory metadataURI,
+        bool gisVerified,
+        uint256 gisConfidenceScore,
+        string memory sentinelSceneId,
+        uint256 vegetationIndex
     ) public onlyOwner returns (uint256) {
         require(!projectCertified[projectId], "Project already certified");
         require(beneficiary != address(0), "Invalid beneficiary address");
@@ -87,7 +99,11 @@ contract NFTCertificate is ERC721, ERC721URIStorage, Ownable {
             plantationDate: block.timestamp,
             ecosystem: ecosystem,
             beneficiary: beneficiary,
-            verified: true
+            verified: true,
+            gisVerified: gisVerified,
+            gisConfidenceScore: gisConfidenceScore,
+            sentinelSceneId: sentinelSceneId,
+            vegetationIndex: vegetationIndex
         });
 
         // Update mappings

@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   const projects = (allProjectsData as any)?.projects || [];
   const pendingProjects = (pendingData as any)?.projects || [];
   const verifiedProjects = projects.filter((p: any) => p.status === "verified");
+  const gisVerifiedProjects = projects.filter((p: any) => p.gisVerificationStatus === "verified");
   const totalCredits = verifiedProjects.reduce((sum: number, p: any) => sum + parseFloat(p.carbonCredits || "0"), 0);
   const totalArea = verifiedProjects.reduce((sum: number, p: any) => sum + parseFloat(p.areaHectares || "0"), 0);
 

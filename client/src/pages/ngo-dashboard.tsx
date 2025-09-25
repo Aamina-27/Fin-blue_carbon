@@ -53,6 +53,7 @@ export default function NGODashboard() {
   const projects = (userProjects as any)?.projects || [];
   const activeProjects = projects.filter((p: any) => p.status === "verified").length;
   const pendingProjects = projects.filter((p: any) => p.status === "pending").length;
+  const gisVerifiedProjects = projects.filter((p: any) => p.gisVerificationStatus === "verified").length;
   const totalCredits = projects.reduce((sum: number, p: any) => sum + parseFloat(p.carbonCredits || "0"), 0);
   const totalArea = projects.reduce((sum: number, p: any) => sum + parseFloat(p.areaHectares || "0"), 0);
 
@@ -382,9 +383,26 @@ export default function NGODashboard() {
                     <div key={project.id} className="border border-border rounded-lg p-4" data-testid={`project-${project.id}`}>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">{project.name}</h4>
-                        <Badge className={getStatusColor(project.status)}>
-                          {project.status}
-                        </Badge>
+                        <div className="flex space-x-2">
+                          <Badge className={getStatusColor(project.status)}>
+                            {project.status}
+                          </Badge>
+                          {project.gisVerificationStatus === 'verified' && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-200">
+                              🛰️ GIS Verified
+                            </Badge>
+                          )}
+                          {project.gisVerificationStatus === 'failed' && (
+                            <Badge variant="secondary" className="bg-red-100 text-red-800 hover:bg-red-200">
+                              ⚠️ GIS Failed
+                            </Badge>
+                          )}
+                          {project.gisVerificationStatus === 'pending' && (
+                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
+                              ⏳ GIS Pending
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground mb-3">
                         {project.latitude}, {project.longitude} • {project.areaHectares} ha restored

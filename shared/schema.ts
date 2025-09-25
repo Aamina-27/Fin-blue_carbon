@@ -23,6 +23,9 @@ export const projects = pgTable("projects", {
   areaHectares: decimal("area_hectares", { precision: 10, scale: 2 }).notNull(),
   projectType: text("project_type").notNull().$type<"mangrove" | "seagrass" | "saltmarsh" | "other">(),
   status: text("status").notNull().$type<"pending" | "verified" | "rejected">().default("pending"),
+  gisVerificationStatus: text("gis_verification_status").notNull().$type<"pending" | "verified" | "failed" | "not_required">().default("pending"),
+  gisVerifiedAt: timestamp("gis_verified_at"),
+  gisConfidenceScore: decimal("gis_confidence_score", { precision: 5, scale: 4 }), // 0-1 confidence score
   submittedBy: varchar("submitted_by").notNull().references(() => users.id),
   verifiedBy: varchar("verified_by").references(() => users.id),
   carbonCredits: decimal("carbon_credits", { precision: 10, scale: 2 }).default("0"),
