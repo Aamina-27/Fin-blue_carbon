@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 
 // Referenced from javascript_openai integration
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 /**
  * Analyzes uploaded drone/satellite images to verify mangrove plantation area and health
@@ -17,6 +17,21 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  */
 export async function verifyMangroveImage(projectId, fieldDataId, base64Image) {
   try {
+    // Check if OpenAI is available
+    if (!openai) {
+      return {
+        status: "failed",
+        score: 0,
+        error: "OpenAI API key not configured. AI verification is not available.",
+        metrics: {
+          vegetationHealth: 0,
+          mangroveCharacteristics: false,
+          plantationCoverage: 0,
+          anomaliesDetected: true,
+        }
+      };
+    }
+
     // Create AI verification job record
     const [jobRecord] = await db
       .insert(aiVerificationJobs)
